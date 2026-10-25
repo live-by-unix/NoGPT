@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {analyzeText,cleanMarkdown,extractiveSummary,wordsOf} from '../detector.js';
-import {rtfText} from '../readers.js';
+import {rtfText,readTextFile} from '../readers.js';
+import {docText} from '../doc-reader.js';
 const sample='A small human story begins right here. At sunrise, we went outside and heard birds singing. Some days are easier than others! After lunch we walked home.\nMy notes are surprisingly messy, but that is okay.';
 const r=analyzeText(sample);
 assert.ok(r.score>=0&&r.score<=100);
@@ -15,3 +16,14 @@ assert.equal(analyzeText('abc').score>=0,true);
 assert.equal(analyzeText('Hello world!').wordCount,2);
 assert.equal(analyzeText('This is a test. More text.').method.includes('NOT'),true);
 console.log('NoGPT core regression checks passed');
+
+// Regression: generic fluency, sentence length, and transitional prose alone cannot dominate a score.
+const natural='Yesterday the water pipe broke behind the old bakery. Nobody knew what happened. I phoned our neighbor because she had a wrench. By the time we got to the corner, the road was soaked and the owner was outside in his slippers. We used a rag to hold the joint until a plumber arrived. I kept checking my watch because I was late for work. That afternoon, the town felt unusually quiet, except for the traffic from the main street.';
+const template='In today\'s rapidly evolving digital landscape, innovation plays a crucial role in shaping our future. Furthermore, it is important to note that every organization must harness the power of technological transformation. Moreover, the transformative landscape offers a wide range of opportunities for progress. Additionally, organizations can unlock the potential of next-generation solutions through meaningful partnerships. In the ever-evolving landscape, it is essential to adapt to change and navigate the complexities of modern society. Ultimately, the importance of collaboration cannot be overstated. In conclusion, technology plays a pivotal role in fostering innovation. It is worth noting that organizations should leverage resources in a comprehensive and seamless manner. In summary, a strategic approach can unlock the potential of modern innovation.';
+assert.ok(analyzeText(template).score>analyzeText(natural).score,'formulaic writing should have more measured patterns than a personal account');
+assert.ok(analyzeText(natural).score<40,'do not rate a natural narrative as strongly formulaic');
+assert.ok(analyzeText('Hello world').score<=22,'tiny text must not give an extreme score');
+assert.ok(analyzeText('Bonjour tout le monde, je voudrais écrire une lettre.').evidence.includes('text'));
+assert.throws(()=>docText(new Uint8Array(512)),/Cannot read legacy DOC/);
+await assert.rejects(readTextFile(new File(['test'], 'malware.exe')), /Unsupported format/);
+console.log('NoGPT v2 regression checks passed');

@@ -163,3 +163,18 @@ $('copy').addEventListener('click',async()=>{
 });
 $('print').addEventListener('click',()=>{if(activeDoc().result)window.print()});
 wordCount();drawFiles();
+
+// Theme is not stored: initial appearance follows the OS, and the user's choice lasts in this tab only.
+const themeToggle=$('theme-toggle');
+const themeMedia=window.matchMedia('(prefers-color-scheme: dark)');
+let manualTheme=false;
+function applyTheme(mode){
+  document.documentElement.dataset.theme=mode;
+  themeToggle.textContent=mode==='dark'?'☀ Light mode':'☾ Dark mode';
+  themeToggle.setAttribute('aria-label',mode==='dark'?'Switch to light mode':'Switch to dark mode');
+  themeToggle.setAttribute('aria-pressed',String(mode==='dark'));
+  document.querySelector('meta[name="theme-color"]').setAttribute('content',mode==='dark'?'#090f1e':'#f6f8fc');
+}
+applyTheme(themeMedia.matches?'dark':'light');
+themeToggle.addEventListener('click',()=>{manualTheme=true;applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark')});
+themeMedia.addEventListener?.('change',e=>{if(!manualTheme)applyTheme(e.matches?'dark':'light')});

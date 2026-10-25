@@ -1,3 +1,4 @@
+import {docText} from './doc-reader.js';
 // Entirely browser-local file readers. No remote requests, third-party scripts or uploads.
 const MAX_INPUT=12*1024*1024;
 const MAX_UNCOMPRESSED=18*1024*1024;
@@ -109,9 +110,10 @@ function rtfText(raw){
 export async function readTextFile(file){
   if(file.size>MAX_INPUT)throw Error('File exceeds the 12 MB input limit.');
   const ext=file.name.split('.').pop().toLowerCase();
-  if(!['txt','text','md','markdown','docx','rtf'].includes(ext))throw Error('Unsupported format. Use .txt, .md, .docx, or .rtf.');
+  if(!['txt','text','md','markdown','docx','doc','rtf'].includes(ext))throw Error('Unsupported format. Use .txt, .md, .docx, .doc, or .rtf.');
   let text;
   if(ext==='docx') text=await docxText(file);
+  else if(ext==='doc') text=docText(await file.arrayBuffer());
   else if(ext==='rtf'){
     const bytes=new Uint8Array(await file.arrayBuffer());
     text=rtfText(new TextDecoder('windows-1252').decode(bytes));

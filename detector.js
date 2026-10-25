@@ -45,54 +45,112 @@ function repetition(tokens){
   let repeats=0;for(const n of counts.values())repeats+=Math.max(0,n-1);
   return repeats/(tokens.length-2);
 }
+// Version 2 favors multiple independent signs over one generic writing trait.
+// No text-only heuristic is a validated source-of-authorship estimate.
+const FORMULAE=[
+  ['it is important to note',2],['it is worth noting',2],['in conclusion',1],
+  ['in summary',1],['in today\'s fast-paced',3],['in today’s fast-paced',3],
+  ['in today\'s rapidly',3],['in today’s rapidly',3],['delve into',1],
+  ['plays a crucial role',2],['a crucial role in',2],['a pivotal role in',2],
+  ['this article explores',2],['this essay explores',2],['let us explore',2],
+  ['let\'s explore',2],['a testament to',1],['in the realm of',2],
+  ['in the ever-evolving',2],['it is essential to',1],['the importance of',0.5],
+  ['ultimately',0.5],['furthermore',0.5],['moreover',0.5],['additionally',0.5],
+  ['seamlessly',0.5],['comprehensive',0.4],['robust',0.4],['landscape',0.4],
+  ['multifaceted',0.4],['foster',0.3],['harness the power',1.5],
+  ['unlock the potential',2],['a wide range of',0.5],['as we navigate',1.5]
+];
+const BUZZ=new Set('tapestry pivotal crucial testament underscore underscores transformative leveraging transformative landscape beacon navigate foster fostering seamless seamlessly multifaceted innovative unparalleled impactful empower empowering increasingly myriad vital indispensable'.split(' '));
+function ngramRepeats(tokens,size){
+  if(tokens.length<size*2)return 0;
+  const counts=new Map();
+  for(let i=0;i<=tokens.length-size;i++){
+    const gram=tokens.slice(i,i+size).join(' ');
+    if(new Set(tokens.slice(i,i+size)).size===1)continue;
+    counts.set(gram,(counts.get(gram)||0)+1);
+  }
+  let repeated=0;for(const count of counts.values())repeated+=Math.max(0,count-1);
+  return repeated/(tokens.length-size+1);
+}
+function phraseHits(text){
+  const out=[];
+  for(const [phrase,weight] of FORMULAE){
+    const pattern=new RegExp('(?<![\\p{L}\\p{N}])'+phrase.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![\\p{L}\\p{N}])','gu');
+    const count=[...text.matchAll(pattern)].length;
+    if(count)out.push({phrase,weight,count});
+  }
+  return out;
+}
 export function analyzeText(input,{markdown=false}={}){
   const original=String(input||'');
   const plain=markdown?cleanMarkdown(original):original;
-  const tokens=wordsOf(plain).map(w=>w.toLocaleLowerCase());
+  const wordList=wordsOf(plain);
+  const tokens=wordList.map(w=>w.toLocaleLowerCase());
   const sentences=sentencesOf(plain);
   const lens=sentences.map(s=>wordsOf(s.text).length);
-  const n=tokens.length, variance=avg(lens)?sd(lens)/avg(lens):0;
+  const n=tokens.length, m=sentences.length;
+  const variance=avg(lens)?sd(lens)/avg(lens):0;
   const diversity=ttr(tokens);
-  const repeated=repetition(tokens);
+  const repeatedTrigrams=ngramRepeats(tokens,3);
+  const repeatedLong=ngramRepeats(tokens,5);
   const lower=plain.toLocaleLowerCase();
-  const transitionHits=TRANSITIONS.reduce((s,p)=>s+(lower.match(new RegExp('\\b'+p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','g'))||[]).length,0);
-  const transitionRate=transitionHits/Math.max(n,1)*100;
+  const patterns=phraseHits(lower);
+  const formulaWeight=patterns.reduce((sum,p)=>sum+p.weight*p.count,0);
+  const uniqueFormula=patterns.length;
+  const transitionHits=patterns.reduce((sum,p)=>sum+p.count,0);
+  const paras=plain.split(/\n\s*\n/).filter(x=>x.trim());
+  const contentWords=tokens.filter(t=>t.length>=4&&!STOP.has(t));
+  const buzzHits=contentWords.filter(t=>BUZZ.has(t)).length;
   const starts=new Map();
-  for(const sent of sentences){const start=wordsOf(sent.text).slice(0,3).map(w=>w.toLowerCase()).join(' ');if(start)starts.set(start,(starts.get(start)||0)+1);}
-  const duplicateStarts=Math.max(0,[...starts.values()].reduce((a,b)=>a+Math.max(0,b-1),0))/Math.max(sentences.length,1);
-  const longProse=lens.filter(x=>x>=10).length/Math.max(lens.length,1);
-  const uniformity=clamp((0.84-variance)/0.67);
-  const repeatSignal=clamp((repeated-.035)/.19);
-  const transitionSignal=clamp((transitionRate-.30)/2.0);
-  const lexicalSignal=clamp((.83-diversity)/.33);
-  const startSignal=clamp((duplicateStarts-.06)/.4);
-  const polishedSignal=clamp((longProse-.48)/.44)*uniformity;
-  // Mechanistic, hand-chosen weights; not fitted on or validated against a corpus.
+  for(const sent of sentences){
+    const w=wordsOf(sent.text).map(t=>t.toLowerCase());
+    if(w.length<4)continue;
+    const start=w.slice(0,2).join(' ');
+    starts.set(start,(starts.get(start)||0)+1);
+  }
+  const duplicateStarts=[...starts.values()].reduce((sum,k)=>sum+Math.max(0,k-1),0)/Math.max(m,1);
+  const openings=[...starts.values()].filter(k=>k>=3).length;
+  // Format alone is not authorship evidence: uniformity only matters alongside other strong signals.
+  const cadenceValue=m>=8&&avg(lens)>=9?clamp((.46-variance)/.30):0;
+  const weakLexical=n>=160?clamp((.65-diversity)/.24):0;
+  const concrete=(wordList.filter(w=>/\d/.test(w)).length + (plain.match(/[“”"«»]/g)||[]).length/2)/Math.max(n,1)*100;
+  const firstPerson=wordList.filter(w=>/^(i|me|mine|my|we|us|our|i'm|i've)$/i.test(w)).length/Math.max(n,1)*100;
+  const informal=(plain.match(/\b(?:gonna|wanna|lol|btw|idk|kinda|sorta|ain't)\b|[!?]{2,}/gi)||[]).length/Math.max(n,1)*100;
   const components=[
-    {key:'uniformity',label:'Sentence uniformity',value:uniformity,weight:26,description:'Similar sentence lengths across the passage'},
-    {key:'repetition',label:'Repeated phrasing',value:repeatSignal,weight:22,description:'Repeated three-word sequences'},
-    {key:'transitions',label:'Formulaic transitions',value:transitionSignal,weight:18,description:'Common connective and stock phrases'},
-    {key:'diversity',label:'Vocabulary predictability',value:lexicalSignal,weight:15,description:'Repeated vocabulary across small windows'},
-    {key:'openings',label:'Repeated sentence openings',value:startSignal,weight:11,description:'Sentences beginning with the same three words'},
-    {key:'cadence',label:'Consistent long-form cadence',value:polishedSignal,weight:8,description:'Long sentences with limited rhythm changes'}
+    {key:'formulaic',label:'Stock AI-associated phrasing',value:clamp((formulaWeight/Math.max(n,100)*100-.22)/2.0),weight:27,description:'Distinctive stock phrases; some occur in human writing too'},
+    {key:'longrepeats',label:'Repeated long phrases',value:clamp((repeatedLong-.002)/.040),weight:23,description:'Repeated sequences of five words across the document'},
+    {key:'structure',label:'Repeated openings',value:clamp((duplicateStarts-.13)/.30)*clamp(m/10),weight:17,description:'Multiple sentences beginning with the same two words'},
+    {key:'buzzwords',label:'Generic promotional language',value:clamp((buzzHits/Math.max(n,1)*100-.22)/1.7),weight:12,description:'Stock abstract language without inherent authorship meaning'},
+    {key:'lexical',label:'Vocabulary recycling',value:weakLexical,weight:9,description:'Lower word diversity in 50-word windows; genre dependent'},
+    {key:'cadence',label:'Unusually even cadence',value:cadenceValue,weight:7,description:'Similar sentence lengths over at least eight sentences'},
+    {key:'trigrams',label:'Short phrase recycling',value:clamp((repeatedTrigrams-.012)/.075),weight:5,description:'Repeated three-word phrases; weak indicator by itself'}
   ];
-  const score=Math.round(clamp(components.reduce((a,c)=>a+c.value*c.weight,0)/100)*100);
-  const evidence=n>=300?'Better sample':n>=150?'Moderate sample':n>=70?'Limited sample':'Very limited sample';
-  const sentenceEvidence=sentences.map(s=>{
-    const w=wordsOf(s.text), text=s.text.toLocaleLowerCase(), sl=w.length;
-    const phrases=TRANSITIONS.filter(p=>text.includes(p)).length;
-    let repeats=0;for(let i=0;i<w.length-2;i++){
-      const g=w.slice(i,i+3).map(t=>t.toLowerCase()).join(' ');
-      if(tokens.indexOf(g.split(' ')[0])>=0 && lower.indexOf(g)!==lower.lastIndexOf(g)) repeats++;
-    }
-    const uniformMatch=clamp(1-Math.abs(sl-avg(lens))/Math.max(avg(lens),6));
-    const val=clamp(.42*uniformMatch*uniformity + .30*clamp(phrases/2) + .28*clamp(repeats/3));
-    return {...s,signal:Math.round(val*100)};
+  const meaningful=components.filter(c=>c.value>=.4).length;
+  const raw=components.reduce((sum,c)=>sum+c.value*c.weight,0);
+  // Avoid letting a single innocuous characteristic dominate the score.
+  const adjusted=meaningful<=1?Math.min(raw,25):meaningful===2?Math.min(raw,54):raw;
+  const balance=clamp(concrete/7,0,.17)+clamp(firstPerson/11,0,.08)+clamp(informal/4,0,.08);
+  const dampened=adjusted*(1-balance);
+  const maxShort=n<70?22:n<150?40:n<220?65:100;
+  const score=Math.round(clamp(dampened,0,maxShort));
+  const warning=n<70?'Very low — too little text for stable patterns':n<150?'Low — short sample':n<220?'Limited — interpret cautiously':n<400?'Moderate sample — not a model verdict':'Longer sample — still not authorship proof';
+  const latinCount=(plain.match(/[A-Za-z]/g)||[]).length;
+  const alphaCount=(plain.match(/\p{L}/gu)||[]).length;
+  const nonEnglish=alphaCount>0&&latinCount/alphaCount<.7;
+  const evidence=warning+(nonEnglish?' · non-Latin-language scoring unvalidated':'');
+  const sentenceEvidence=sentences.map(sent=>{
+    const t=sent.text.toLocaleLowerCase(),w=wordsOf(t),length=w.length;
+    const localFormula=phraseHits(t).reduce((sum,p)=>sum+p.weight*p.count,0);
+    const localBuzz=w.filter(x=>BUZZ.has(x)).length;
+    const start=w.slice(0,2).join(' ');
+    const opening=starts.get(start)||0;
+    const repeated=length>=5&&lower.indexOf(w.slice(0,5).join(' '))!==lower.lastIndexOf(w.slice(0,5).join(' '));
+    const signal=clamp((localFormula*19)+(localBuzz*12)+(opening>=3?18:0)+(repeated?25:0),0,100);
+    return {...sent,signal:Math.round(signal)};
   });
-  const frequencies=new Map();tokens.forEach(t=>{if(t.length>2&&!STOP.has(t)&&!/^\d+$/.test(t))frequencies.set(t,(frequencies.get(t)||0)+1);});
+  const frequencies=new Map();tokens.forEach(t=>{if(t.length>2&&!STOP.has(t)&&!/\d/.test(t))frequencies.set(t,(frequencies.get(t)||0)+1);});
   const keywords=[...frequencies.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,12).map(([word,count])=>({word,count}));
-  const paragraphs=plain.split(/\n\s*\n/).filter(v=>v.trim()).length;
-  return {score,evidence,wordCount:n,charCount:plain.length,charactersNoSpaces:plain.replace(/\s/g,'').length,sentenceCount:sentences.length,paragraphCount:paragraphs,readingMinutes:n/225,speakingMinutes:n/145,averageSentence:Math.round(avg(lens)*10)/10,sentenceVariation:Math.round(variance*100),diversity:Math.round(diversity*100),repeatedTrigrams:Math.round(repeated*100),transitions:transitionHits,components,keywords,sentences:sentenceEvidence,plain,generatedAt:new Date().toISOString(),method:'NoGPT v1 heuristic writing-pattern score (NOT an AI authorship probability)'};
+  return {score,evidence,wordCount:n,charCount:plain.length,charactersNoSpaces:plain.replace(/\s/g,'').length,sentenceCount:m,paragraphCount:paras.length,readingMinutes:n/225,speakingMinutes:n/145,averageSentence:Math.round(avg(lens)*10)/10,sentenceVariation:Math.round(variance*100),diversity:Math.round(diversity*100),repeatedTrigrams:Math.round(repeatedTrigrams*100),repeatedLongPhrases:Math.round(repeatedLong*100),transitions:transitionHits,distinctFormulae:uniqueFormula,components,keywords,sentences:sentenceEvidence,plain,generatedAt:new Date().toISOString(),method:'NoGPT v2 conservative multi-signal writing-pattern score (NOT an AI authorship probability)'};
 }
 export function extractiveSummary(text,maxSentences=3){
   const list=sentencesOf(text).filter(s=>wordsOf(s.text).length>=5);
