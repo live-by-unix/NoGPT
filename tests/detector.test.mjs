@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {analyzeText,cleanMarkdown,extractiveSummary,wordsOf} from '../detector.js';
+import {rtfText} from '../readers.js';
+const sample='A small human story begins right here. At sunrise, we went outside and heard birds singing. Some days are easier than others! After lunch we walked home.\nMy notes are surprisingly messy, but that is okay.';
+const r=analyzeText(sample);
+assert.ok(r.score>=0&&r.score<=100);
+assert.equal(r.wordCount,wordsOf(sample).length);
+assert.ok(r.sentences.length>=4);
+assert.equal(r.components.reduce((s,c)=>s+c.weight,0),100);
+assert.ok(extractiveSummary(sample,2).length>0);
+assert.match(cleanMarkdown('# Title\n\n**Some** [words](https://example.com)\n```js\nconst x = 1\n```'),/Some words/);
+assert.ok(!cleanMarkdown('```js\nconsole.log(1)\n```').includes('console'));
+assert.equal(rtfText('{\\rtf1\\ansi Hello \\b world\\b0\\par Next\\tab line\\u8217?}'),'Hello world\nNext\tline’');
+assert.equal(analyzeText('abc').score>=0,true);
+assert.equal(analyzeText('Hello world!').wordCount,2);
+assert.equal(analyzeText('This is a test. More text.').method.includes('NOT'),true);
+console.log('NoGPT core regression checks passed');
