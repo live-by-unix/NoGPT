@@ -23,13 +23,13 @@ function drawFiles(){
   for(const doc of state.docs.filter(d=>d.id!=='paste')){
     const item=el('div','fileitem'+(doc.id===state.active?' active':''));
     addButton(item,'▤ '+doc.name,()=>setActive(doc.id));
-    const tag=el('small','',doc.error?'Error':doc.result?doc.result.score+'/100':'Ready');
+    const tag=el('small','',doc.error?'Error':doc.result?doc.result.score+'%':'Ready');
     item.append(tag);
     addButton(item,'×',()=>removeDoc(doc.id),'remove-file').setAttribute('aria-label','Remove '+doc.name);
     parent.append(item);
     const row=el('div','fileitem');
     addButton(row,doc.name,()=>{setActive(doc.id);$('analyzer').scrollIntoView({behavior:'smooth'});});
-    row.append(el('small','',doc.error?'Error':doc.result?doc.result.score+'/100':'Not analyzed'));
+    row.append(el('small','',doc.error?'Error':doc.result?doc.result.score+'%':'Not analyzed'));
     batch.append(row);
   }
   $('export-csv').classList.toggle('hidden',!state.docs.some(d=>d.id!=='paste'&&d.result));
@@ -46,9 +46,9 @@ function drawReport(){
   $('empty').classList.toggle('hidden',Boolean(r));
   if(!r){resetInsights();return;}
   $('result-name').textContent=d.name;
-  $('score').textContent=r.score;
+  $('score').textContent=r.score+'%';
   $('arc').style.strokeDashoffset=String(314.16*(1-r.score/100));
-  $('ring-label').setAttribute('aria-label','Writing-pattern score '+r.score+' out of 100');
+  $('ring-label').setAttribute('aria-label','Uncalibrated AI probability estimate '+r.score+' percent');
   $('evidence').textContent=r.evidence+' · '+r.wordCount+' words';
   $('words').textContent=r.wordCount.toLocaleString();
   $('sentences').textContent=r.sentenceCount.toLocaleString();
@@ -86,7 +86,7 @@ function resetInsights(){
 function scan(){
   const d=activeDoc();d.text=$('editor').value;
   if(!d.text.trim()){status('Enter or open some text first.','error');$('editor').focus();return;}
-  if(wordsOf(d.text).length<8){status('Add at least 8 words to calculate a pattern score.','error');return;}
+  if(wordsOf(d.text).length<8){status('Add at least 8 words to create an estimate.','error');return;}
   if(d.text.length>750000){status('Text must be 750,000 characters or fewer.','error');return;}
   try{d.result=analyzeText(d.text,{markdown:d.markdown});drawReport();drawFiles();status('Analysis finished locally','success');}
   catch(error){status('Could not analyze: '+error.message,'error');}
@@ -116,7 +116,7 @@ function clearAll(){
 }
 function reportString(d){
   const r=d.result;
-  return 'NoGPT — private writing-pattern report\nDocument: '+d.name+'\nScore: '+r.score+'/100 (NOT a probability of AI authorship)\nSample: '+r.evidence+'\nWords: '+r.wordCount+'\nSentences: '+r.sentenceCount+'\nReading time: '+formatTime(r.readingMinutes)+'\n\nSignals:\n'+r.components.map(c=>'- '+c.label+': '+Math.round(c.value*100)+'/100 — '+c.description).join('\n')+'\n\nSelected sentences (extractive summary):\n'+extractiveSummary(r.plain,3)+'\n\nCaution: NoGPT is an uncalibrated heuristic. A score cannot establish authorship and should never be used as sole evidence of AI use.\n';
+  return 'NoGPT — private AI-likelihood report\nDocument: '+d.name+'\nEstimated AI probability: '+r.score+'% (UNCALIBRATED, NOT VALIDATED)\nUnderlying writing-pattern index: '+r.patternScore+'/100\nSample: '+r.evidence+'\nWords: '+r.wordCount+'\nSentences: '+r.sentenceCount+'\nReading time: '+formatTime(r.readingMinutes)+'\n\nSignals:\n'+r.components.map(c=>'- '+c.label+': '+Math.round(c.value*100)+'/100 — '+c.description).join('\n')+'\n\nSelected sentences (extractive summary):\n'+extractiveSummary(r.plain,3)+'\n\nCaution: NoGPT is an uncalibrated heuristic. A score cannot establish authorship and should never be used as sole evidence of AI use.\n';
 }
 function saveFile(filename,content,type){
   const url=URL.createObjectURL(new Blob([content],{type}));
@@ -126,15 +126,15 @@ function exportCurrent(ext){
   const d=activeDoc();if(!d.result){status('Analyze text before exporting.','error');return;}
   const base=d.name.replace(/\.[^.]+$/,'').replace(/[^a-z0-9_-]/gi,'_').slice(0,60)||'nogpt';
   if(ext==='txt')saveFile(base+'-nogpt-report.txt',reportString(d),'text/plain;charset=utf-8');
-  else saveFile(base+'-nogpt-report.json',JSON.stringify({document:d.name,scoreType:'Writing-pattern score, NOT AI probability',analysis:d.result},null,2),'application/json;charset=utf-8');
+  else saveFile(base+'-nogpt-report.json',JSON.stringify({document:d.name,scoreType:'Heuristic estimated AI likelihood percentage (NOT a calibrated probability)',calibrated:false,analysis:d.result},null,2),'application/json;charset=utf-8');
   status('Report downloaded to your device','success');
 }
 function csvEscape(s){return '"'+String(s??'').replace(/"/g,'""')+'"'}
 function exportBatch(){
   const rows=state.docs.filter(d=>d.id!=='paste'&&d.result);
   if(!rows.length){status('No analyzed files to export','error');return;}
-  const cells=[['Document','Pattern score (0-100)','Words','Sentences','Evidence','Method']];
-  for(const d of rows)cells.push([d.name,d.result.score,d.result.wordCount,d.result.sentenceCount,d.result.evidence,d.result.method]);
+  const cells=[['Document','Estimated AI probability (%) - uncalibrated','Pattern index (0-100)','Words','Sentences','Evidence','Method']];
+  for(const d of rows)cells.push([d.name,d.result.score,d.result.patternScore,d.result.wordCount,d.result.sentenceCount,d.result.evidence,d.result.method]);
   saveFile('nogpt-batch.csv',cells.map(row=>row.map(csvEscape).join(',')).join('\r\n'),'text/csv;charset=utf-8');
   status('Batch CSV downloaded','success');
 }

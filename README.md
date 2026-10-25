@@ -1,6 +1,6 @@
 # NoGPT
 
-**Private browser-only writing-pattern analysis.** No account, API key, frameworks, back end, tracking, cookies, analytics, or text uploads.
+**Private browser-only AI-likelihood estimation.** No account, API key, frameworks, back end, tracking, cookies, analytics, or text uploads.
 
 [Live site](https://nogptnow.pages.dev) · [Source](https://github.com/live-by-unix/NoGPT)
 
@@ -8,7 +8,7 @@
 
 - Paste, edit or type text. Import one or up to 30 documents at once: `.txt`, `.text`, `.md`, `.markdown`, `.docx` (modern Word), `.doc` (Word 97–2003 binary), or `.rtf`.
 - Process text and extract supported documents locally using JavaScript and browser APIs. Word DOCX ZIP/XML parsing uses `DecompressionStream`; RTF decoding supports Unicode escape sequences and common text/control tokens. Legacy `.doc` uses an on-device OLE2/CFB and Word FIB/CLX piece-table parser (including compressed 8-bit and Unicode text). **Old Word 6/95, encrypted documents, malformed/unsupported DOC variants, PDF, images/OCR, and ZIP64 documents are not supported.**
-- Return a **0–100 writing-pattern score**, not a binary label, claimed AI percentage, model attribution, or verified authorship probability.
+- Show a **0–100% estimated AI authorship likelihood** (a transparent, **uncalibrated heuristic**, never a verified probability or binary verdict). The underlying 0–100 writing-pattern index remains available in exports.
 - Highlight individual passages with identifiable patterns; inspect seven component scores. Dark/light theme toggle follows system preference by default and never stores a preference.
 - See word/character/sentence counts, paragraphs, estimated reading and speaking time, sentence-length variation, most-used content words, and an extractive (original-sentences) summary.
 - Import/compare multiple files, switch between reports, and export batch CSV.
@@ -17,7 +17,7 @@
 
 ## How it works / limitations
 
-This project **does not implement ZeroGPT's proprietary DeepAnalyse model**. It is not a reproduction of their trained detector. The browser-local score uses seven conservative, hand-weighted signals: stock phrases, repeated five-word sequences, repeated openings, generic promotional diction, local lexical diversity, unusually even cadence, and repeated trigrams. A single stylistic trait cannot dominate; short documents have score caps. This reduces some known false-positive traps but **does not establish an improved accuracy rate** without a labeled held-out benchmark. These weights **have not been trained, benchmark-calibrated, or validated**, and the score is **not** a probability of AI generation. Sentence highlights are based on the same heuristic signals. Text below 150–200 words is especially weak evidence, and results for multilingual/technical writing are less meaningful. Human writers may receive high scores; AI writing may receive low scores. Do **not** use it as sole evidence in academic, hiring, moderation or disciplinary decisions.
+This project **does not implement ZeroGPT's proprietary DeepAnalyse model**. It is not a reproduction of a trained AI-authorship detector. The local score measures seven hand-weighted signals: stock phrases, repeated five-word sequences, repeated openings, generic promotional diction, local lexical diversity, unusually even cadence, and repeated trigrams. The underlying writing-pattern index is mapped to an **estimated AI probability-like percentage** using `100 / (1 + exp(-(patternIndex - 40)/11))` and blended toward a neutral 50% for small samples via `sampleStrength = clamp((wordCount - 30)/270, 0, 1)`. **This is an uncalibrated, assumed mathematical mapping, NOT an empirical posterior probability**. To make it a statistically trustworthy probability, train/calibrate with representative labeled human and AI documents, account for authorship base rates, and evaluate on held-out datasets. No such validation has been performed. Low-evidence samples approach 50% to mean *unknown*, not a 50/50 factual chance. Sentence highlights show style clues only. Human writers may receive high estimates; AI writing may receive low estimates. Do **not** use it as sole evidence in academic, hiring, moderation or disciplinary decisions.
 
 ZeroGPT also offers plagiarism lookup, translation, generative paraphrasing, chatbot, AI humanization, image detection, grammar checking and additional cloud-based tools. These are **not included**; implementing truthful equivalents with zero network requests requires locally shipped models, reference corpora, dictionaries and evaluation. This project does not pretend they work when they do not.
 
@@ -63,6 +63,6 @@ See [LICENSE](LICENSE).
 
 The in-browser `.doc` parser reads the OLE2 compound-file FAT/miniFAT, retrieves WordDocument and 0Table/1Table streams, locates the variable-length FIB `fcClx/lcbClx` entry (index 33), and extracts both Unicode and compressed codepage text via the piece table. Word macros are never run. Password-protected/encrypted files fail with a clear message; no server is contacted. The format is complex: test uncommon `.doc` variants against another trusted document reader when extraction looks incomplete.
 
-## Why no claimed accuracy percentage?
+## Is the displayed percentage calibrated?
 
-Scoring updates mitigate several false-positive triggers but the implementation is **not a trained AI classifier** and has not been evaluated against a broad, held-out human-versus-AI corpus. No deployment of an offline text-only heuristic can truthfully promise accurate provenance across writers, languages and genres. The score must not be interpreted as a percent probability of AI authorship. See the [2025 NAACL evaluation of AI detectors](https://aclanthology.org/2025.findings-naacl.271/) for generalization limitations.
+**No.** The UI reports an *estimated AI probability-like percentage* for users who want that score format. The estimate is uncalibrated, not an observed probability or a claim of validated accuracy; its interpretation depends on the chosen assumptions. No deployment of an offline text-only heuristic can promise accurate provenance across genres, writers and languages. See the [2025 NAACL evaluation of AI detectors](https://aclanthology.org/2025.findings-naacl.271/) for generalization limitations.

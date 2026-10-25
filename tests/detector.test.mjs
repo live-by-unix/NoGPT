@@ -20,10 +20,13 @@ console.log('NoGPT core regression checks passed');
 // Regression: generic fluency, sentence length, and transitional prose alone cannot dominate a score.
 const natural='Yesterday the water pipe broke behind the old bakery. Nobody knew what happened. I phoned our neighbor because she had a wrench. By the time we got to the corner, the road was soaked and the owner was outside in his slippers. We used a rag to hold the joint until a plumber arrived. I kept checking my watch because I was late for work. That afternoon, the town felt unusually quiet, except for the traffic from the main street.';
 const template='In today\'s rapidly evolving digital landscape, innovation plays a crucial role in shaping our future. Furthermore, it is important to note that every organization must harness the power of technological transformation. Moreover, the transformative landscape offers a wide range of opportunities for progress. Additionally, organizations can unlock the potential of next-generation solutions through meaningful partnerships. In the ever-evolving landscape, it is essential to adapt to change and navigate the complexities of modern society. Ultimately, the importance of collaboration cannot be overstated. In conclusion, technology plays a pivotal role in fostering innovation. It is worth noting that organizations should leverage resources in a comprehensive and seamless manner. In summary, a strategic approach can unlock the potential of modern innovation.';
-assert.ok(analyzeText(template).score>analyzeText(natural).score,'formulaic writing should have more measured patterns than a personal account');
-assert.ok(analyzeText(natural).score<40,'do not rate a natural narrative as strongly formulaic');
-assert.ok(analyzeText('Hello world').score<=22,'tiny text must not give an extreme score');
-assert.ok(analyzeText('Bonjour tout le monde, je voudrais écrire une lettre.').evidence.includes('text'));
+assert.ok(analyzeText(template).score>analyzeText(natural).score,'formulaic writing should have a higher estimated AI likelihood than a personal account');
+assert.equal(analyzeText(natural).calibrated,false,'do not claim unvalidated percent is calibrated');
+assert.equal(analyzeText(natural).aiProbabilityEstimate,analyzeText(natural).score);
+assert.ok(Math.abs(analyzeText('Hello world').score-50)<3,'tiny samples should show uncertainty around 50%, not false certainty');
+assert.ok(analyzeText(template.repeat(4)).score>analyzeText(natural).score,'more formulaic evidence should increase estimate');
+assert.ok(analyzeText(natural).patternScore<40,'a natural narrative should not have strong formulaic pattern score');
+assert.ok(analyzeText('Bonjour tout le monde, je voudrais écrire une lettre.').evidence.includes('evidence'));
 assert.throws(()=>docText(new Uint8Array(512)),/Cannot read legacy DOC/);
 await assert.rejects(readTextFile(new File(['test'], 'malware.exe')), /Unsupported format/);
-console.log('NoGPT v2 regression checks passed');
+console.log('NoGPT v3 regression checks passed');

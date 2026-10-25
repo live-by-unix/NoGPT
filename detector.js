@@ -1,5 +1,5 @@
-// NoGPT: interpretable, non-probabilistic writing-pattern analysis.
-// Scores are intentionally NOT estimates of authorship probability.
+// NoGPT: heuristic AI-likelihood estimate from interpretable writing-pattern signals.
+// The displayed percentage is NOT a calibrated probability or authorship proof.
 const WORD_RE = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
 const STOP = new Set('a an and are as at be been but by can could did do does for from had has have he her hers him his how i if in into is it its just me more my no not of on or our ours out over she so some such than that the their them there these they this those through to too under up us very was we were what when where which while who will with would you your yours also then each other one two three'.split(' '));
 const TRANSITIONS = ['furthermore','moreover','additionally','in conclusion','in summary','overall','however','nevertheless','consequently','therefore','thus','it is important to note','it is worth noting','on the other hand','in addition','as a result','in today’s','in today\'s','in the realm of','in the world of','delve into','plays a crucial role','a wide range of','it is essential to','in order to','ultimately','notably','firstly','secondly','lastly'];
@@ -131,9 +131,16 @@ export function analyzeText(input,{markdown=false}={}){
   const adjusted=meaningful<=1?Math.min(raw,25):meaningful===2?Math.min(raw,54):raw;
   const balance=clamp(concrete/7,0,.17)+clamp(firstPerson/11,0,.08)+clamp(informal/4,0,.08);
   const dampened=adjusted*(1-balance);
-  const maxShort=n<70?22:n<150?40:n<220?65:100;
-  const score=Math.round(clamp(dampened,0,maxShort));
-  const warning=n<70?'Very low — too little text for stable patterns':n<150?'Low — short sample':n<220?'Limited — interpret cautiously':n<400?'Moderate sample — not a model verdict':'Longer sample — still not authorship proof';
+  // Convert observed writing-pattern strength to a probability-*like* estimate.
+  // The sigmoid is an explicit assumption, NOT fitted/calibrated on labeled AI
+  // and human text. Short documents shrink toward 50% (inconclusive evidence).
+  // Hence "estimated probability" means an uncalibrated style-based estimate,
+  // NOT the objectively measured chance that an AI wrote these words.
+  const patternScore=Math.round(clamp(dampened,0,100));
+  const unshrunk=100/(1+Math.exp(-(dampened-40)/11));
+  const sampleStrength=clamp((n-30)/270);
+  const score=Math.round(50+(unshrunk-50)*sampleStrength);
+  const warning=n<70?'Very low evidence — near 50% means inconclusive':n<150?'Low evidence — short sample, estimate pulled toward 50%':n<220?'Limited evidence — interpret percentage cautiously':n<400?'Moderate text length — estimate uncalibrated':'Longer sample — estimate remains uncalibrated';
   const latinCount=(plain.match(/[A-Za-z]/g)||[]).length;
   const alphaCount=(plain.match(/\p{L}/gu)||[]).length;
   const nonEnglish=alphaCount>0&&latinCount/alphaCount<.7;
@@ -150,7 +157,7 @@ export function analyzeText(input,{markdown=false}={}){
   });
   const frequencies=new Map();tokens.forEach(t=>{if(t.length>2&&!STOP.has(t)&&!/\d/.test(t))frequencies.set(t,(frequencies.get(t)||0)+1);});
   const keywords=[...frequencies.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,12).map(([word,count])=>({word,count}));
-  return {score,evidence,wordCount:n,charCount:plain.length,charactersNoSpaces:plain.replace(/\s/g,'').length,sentenceCount:m,paragraphCount:paras.length,readingMinutes:n/225,speakingMinutes:n/145,averageSentence:Math.round(avg(lens)*10)/10,sentenceVariation:Math.round(variance*100),diversity:Math.round(diversity*100),repeatedTrigrams:Math.round(repeatedTrigrams*100),repeatedLongPhrases:Math.round(repeatedLong*100),transitions:transitionHits,distinctFormulae:uniqueFormula,components,keywords,sentences:sentenceEvidence,plain,generatedAt:new Date().toISOString(),method:'NoGPT v2 conservative multi-signal writing-pattern score (NOT an AI authorship probability)'};
+  return {score,aiProbabilityEstimate:score,calibrated:false,patternScore,sampleStrength:Math.round(sampleStrength*100),evidence,wordCount:n,charCount:plain.length,charactersNoSpaces:plain.replace(/\s/g,'').length,sentenceCount:m,paragraphCount:paras.length,readingMinutes:n/225,speakingMinutes:n/145,averageSentence:Math.round(avg(lens)*10)/10,sentenceVariation:Math.round(variance*100),diversity:Math.round(diversity*100),repeatedTrigrams:Math.round(repeatedTrigrams*100),repeatedLongPhrases:Math.round(repeatedLong*100),transitions:transitionHits,distinctFormulae:uniqueFormula,components,keywords,sentences:sentenceEvidence,plain,generatedAt:new Date().toISOString(),method:'NoGPT v3 style-based AI probability estimate: logistic mapping plus short-sample shrinkage. NOT empirically calibrated or validated.'};
 }
 export function extractiveSummary(text,maxSentences=3){
   const list=sentencesOf(text).filter(s=>wordsOf(s.text).length>=5);
