@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f6f8fc">
-<meta name="description" content="NoGPT: private client-side AI-likelihood estimate (not calibrated). Paste text or analyze Markdown, Word DOCX and RTF locally. No upload, no login, no tracking.">
+<meta name="description" content="NoGPT: private client-side model-based writing analysis. Paste text or analyze Markdown, Word DOCX and RTF locally. No upload, no login, no tracking.">
 <meta name="robots" content="index,follow">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/styles.css">
-<title>NoGPT — Private AI-likelihood analysis</title>
+<title>NoGPT — Local model-based AI-writing analysis</title>
 </head>
 <body>
 <div class="app">
 <aside class="sidebar" aria-label="Navigation">
-  <div><div class="logo"><span class="logo-icon" aria-hidden="true">N</span><span>NoGPT</span></div><div class="sidebar-tag">Private AI-likelihood analysis, reimagined.</div></div>
+  <div><div class="logo"><span class="logo-icon" aria-hidden="true">N</span><span>NoGPT</span></div><div class="sidebar-tag">Private model-based writing review.</div></div>
   <nav class="side-group" aria-label="Sections">
     <div class="side-label">WORKSPACE</div>
     <button class="side-link active" type="button" data-scroll="analyzer"><span class="bullet" aria-hidden="true">▦</span> Writing analyzer</button>
@@ -23,12 +23,12 @@
     <div class="side-label" style="margin-top:32px">ABOUT</div>
     <button class="side-link" type="button" data-scroll="method"><span class="bullet" aria-hidden="true">ⓘ</span> Scoring method</button>
   </nav>
-  <div class="privacy-sidebar"><div class="privacy-icon" aria-hidden="true">♧</div><strong>Your words stay yours.</strong><p>Analysis happens in your browser. No logins, servers, text uploads, cookies, or analytics.</p></div>
+  <div class="privacy-sidebar"><div class="privacy-icon" aria-hidden="true">♧</div><strong>Your words stay yours.</strong><p>Analysis happens in your browser. No logins, text uploads, cookies, or analytics; model files download from public hosts on first use.</p></div>
   <div class="side-bottom">Open source · <a href="https://github.com/live-by-unix/NoGPT" target="_blank" rel="noopener noreferrer">GitHub repository ↗</a></div>
 </aside>
 <main class="main">
 <header class="topbar"><div class="eyebrow"><span class="dot" aria-hidden="true"></span> Fully local processing <span aria-hidden="true">·</span> No account required</div><div class="top-actions"><button class="tiny-button" id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">☾ Dark mode</button><button class="tiny-button" id="privacy-btn" type="button">⌁ Privacy details</button><a class="tiny-button" href="https://github.com/live-by-unix/NoGPT" target="_blank" rel="noopener noreferrer" style="text-decoration:none">↗ Source</a></div></header>
-<section class="hero"><h1>Understand your writing.<br><span>Keep it private.</span></h1><p>Get a percentage-based estimate of AI-associated writing, entirely on your device. It is a heuristic, not a validated probability or proof of authorship. Nothing is uploaded.</p></section>
+<section class="hero"><h1>Understand your writing.<br><span>Keep it private.</span></h1><p>Run a trained AI-text classifier entirely in your browser. It shows a model score, not proof of AI authorship. First use downloads ~125 MB of model weights and a JavaScript inference runtime; your text is never uploaded.</p></section>
 <div class="workspace" id="analyzer">
 <section class="panel" aria-labelledby="input-heading">
  <div class="panel-header"><div><div class="panel-title" id="input-heading">Your text</div><div class="panel-sub">Paste, type, or bring your own document.</div></div><span class="chip">100% ON DEVICE</span></div>
@@ -39,25 +39,25 @@
 </section>
 <section class="panel" id="report-section" aria-labelledby="result-heading">
  <div class="panel-header"><div><div class="panel-title" id="result-heading">Analysis report</div><div class="panel-sub">Explainable signals, not a definitive verdict.</div></div><span class="chip">NO CLOUD AI</span></div>
- <div class="empty" id="empty"><div><div class="empty-ill" aria-hidden="true">◈</div><h2>Ready when you are</h2><p>Your estimated AI-writing likelihood and detailed explanation will appear here after you analyze text.</p></div></div>
+ <div class="empty" id="empty"><div><div class="empty-ill" aria-hidden="true">◈</div><h2>Ready when you are</h2><p>Your local model score and writing insights appear here after analysis. English passages of at least 120 words are required.</p></div></div>
  <div class="result-inner hidden" id="result">
    <div class="result-head"><span class="result-doc" id="result-name">Pasted text</span><span class="chip">LOCAL REPORT</span></div>
-   <div class="score-line"><div class="ring" role="img" id="ring-label" aria-label="Estimated AI authorship percentage"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50"></circle><circle cx="60" cy="60" r="50" id="arc"></circle></svg><div class="ring-text"><b id="score">0%</b><span>AI estimate</span></div></div><div class="score-desc"><strong>Estimated AI probability</strong><p>Higher percentages mean more AI-associated patterns were measured. <b>Uncalibrated estimate:</b> this is not a scientifically validated probability or proof of who wrote it. 50% on short text means uncertain.</p><span class="evidence" id="evidence">Very limited sample</span></div></div>
+   <div class="score-line"><div class="ring" role="img" id="ring-label" aria-label="On-device AI model output"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50"></circle><circle cx="60" cy="60" r="50" id="arc"></circle></svg><div class="ring-text"><b id="score">—</b><span>model score</span></div></div><div class="score-desc"><strong>AI model score</strong><p>This percentage comes from a trained on-device classifier, not a hand-written formula. Its softmax is <b>not calibrated</b> to mean the real probability that AI wrote your text.</p><span class="evidence" id="evidence">Not analyzed</span><p id="model-details" class="model-details" aria-live="polite"></p></div></div>
    <div class="summary-stats"><div class="mini-stat"><b id="words">0</b><span>Words</span></div><div class="mini-stat"><b id="sentences">0</b><span>Sentences</span></div><div class="mini-stat"><b id="reading">0</b><span>Reading time</span></div></div>
    <div class="result-tabs" role="tablist" aria-label="Report views"><button type="button" role="tab" aria-selected="true" class="result-tab active" data-tab="highlights">Highlights</button><button type="button" role="tab" aria-selected="false" class="result-tab" data-tab="signals">Signals</button><button type="button" role="tab" aria-selected="false" class="result-tab" data-tab="summary">Summary</button></div>
-   <div class="tab-content" id="highlights" role="tabpanel"><div class="highlighted" id="highlight-text"></div><div class="legend"><i></i> Highlighted passages exhibit measured writing patterns, not verified AI use.</div></div>
+   <div class="tab-content" id="highlights" role="tabpanel"><div class="highlighted" id="highlight-text"></div><div class="legend"><i></i> Highlights are separate style heuristics, not model attributions or proof of AI use.</div></div>
    <div class="tab-content hidden" id="signals" role="tabpanel"><div id="metrics"></div></div>
    <div class="tab-content hidden" id="summary" role="tabpanel"><div class="summary-text" id="summary-text"></div><p class="legend">Extractive summary: selects original sentences locally; does not generate new claims.</p></div>
    <div class="result-actions"><button class="small-button" type="button" id="copy">⧉ Copy report</button><button class="small-button" type="button" id="save-txt">↓ Text</button><button class="small-button" type="button" id="save-json">↓ JSON</button><button class="small-button" type="button" id="print">▤ Print / PDF</button></div>
-   <div id="print-details" class="hidden">NoGPT shows an estimated AI-writing percentage computed from style heuristics. It has not been calibrated against labeled human/AI data and must not be treated as a reliable probability or used alone in consequential decisions.</div>
+   <div id="print-details" class="hidden">NoGPT runs a pretrained AI-text classifier locally. It reports uncalibrated softmax-based model scores, not verified authorship probabilities. Not suitable as sole evidence in consequential decisions.</div>
  </div>
 </section>
 </div>
 <div class="bottom-grid">
- <section class="panel info-panel" id="batch"><div class="panel-title">Batch documents</div><p style="margin-top:8px">Select or drop multiple supported files to score each independently. Switch documents above to inspect their sentence-level results.</p><div id="batch-list" style="margin-top:14px"></div><button id="export-csv" class="small-button hidden" type="button" style="margin-top:11px">↓ Export batch CSV</button></section>
+ <section class="panel info-panel" id="batch"><div class="panel-title">Batch documents</div><p style="margin-top:8px">Select or drop multiple supported files to score each independently. Switch documents above to inspect their independent on-device model scores and style highlights.</p><div id="batch-list" style="margin-top:14px"></div><button id="export-csv" class="small-button hidden" type="button" style="margin-top:11px">↓ Export batch CSV</button></section>
  <section class="panel info-panel" id="insights"><div class="panel-title">Writing insights</div><div class="insight-grid" style="margin-top:14px"><div><strong id="average-length">—</strong><span>Words / sentence</span></div><div><strong id="variation">—</strong><span>Length variation</span></div><div><strong id="reading-level">—</strong><span>Speaking time</span></div></div><p style="margin-top:15px">Most common content words</p><div class="keywords" id="keywords"><span class="status">Analyze text to see keywords.</span></div></section>
 </div>
-<section class="panel info-panel" id="method" style="margin-top:22px"><h2>What the AI probability estimate means</h2><p>NoGPT v3 shows a <b>0–100% estimated AI-writing likelihood</b> based on seven local, interpretable writing-pattern features. This is <b>not a calibrated statistical probability</b> and has not been trained on representative labeled human and AI text. Its mathematical mapping assumes a sigmoid curve; it is not learned from real authorship frequencies. Samples under roughly 300 words are pulled toward <b>50% (inconclusive)</b> to avoid fake certainty. Higher percentages mean stronger stylistic resemblance to some formulaic AI-associated writing, not proof of AI authorship. False positives and negatives are unavoidable; short, formal, technical, translated or non-English writing can mislead. Real probability calibration would require independent, representative human/AI evaluation data and explicit base rates. Inspect the signals rather than treating the percentage as a verdict. All text and the temporary theme choice exist in this browser tab only and are never sent to the website server.</p><p class="notice">Do not use these results as sole evidence of AI use in school, employment, publishing, or any consequential setting.</p></section>
+<section class="panel info-panel" id="method" style="margin-top:22px"><h2>How the on-device model works</h2><p>NoGPT v4 uses <b>TMR, a RoBERTa-base text classifier trained on the RAID benchmark</b>. Its ONNX quantized weights (~125 MB) and Transformers.js runtime are downloaded from Hugging Face and jsDelivr when you first run an eligible analysis. These hosts can see standard asset-request metadata (such as your IP address), but <b>no pasted text, imported document contents, or inference requests are transmitted to them</b>. Analysis happens with WebAssembly in your browser, without our server or login. The score is an <b>uncalibrated model softmax average</b>, not a proven authorship probability. Long documents are split into passages; sampling coverage and agreement are reported. Inputs under 120 words and apparently non-English input receive <b>no numerical score</b> rather than a fake 50%. Passages with different styles, new AI models, unusual topics, editing and translation can fool the detector. Highlighted style signals are separate from the classifier and must not be interpreted as evidence of which passages were AI-written. Its publicly reported benchmark metrics were produced under specified RAID conditions and do not prove accuracy on your documents. NoGPT has not been independently validated on a fresh out-of-distribution benchmark.</p><p class="notice">Do not use these results as sole evidence of AI use in school, employment, publishing, or any consequential setting.</p></section>
 <footer class="footer"><span>© NoGPT · Private by design · No tracking</span><span>Browser-native JavaScript · No backend · No framework · <a href="https://github.com/live-by-unix/NoGPT" target="_blank" rel="noopener noreferrer">View code ↗</a></span></footer>
 </main></div>
 <script type="module" src="/app.js"></script>

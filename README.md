@@ -1,68 +1,58 @@
-# NoGPT
+# NoGPT v4 — on-device AI writing analysis
 
-**Private browser-only AI-likelihood estimation.** No account, API key, frameworks, back end, tracking, cookies, analytics, or text uploads.
+[Website](https://nogptnow.pages.dev) · [Code](https://github.com/live-by-unix/NoGPT)
 
-[Live site](https://nogptnow.pages.dev) · [Source](https://github.com/live-by-unix/NoGPT)
+**No login, no uploaded documents, no server-side inference, no tracking scripts. Vanilla HTML/CSS/JavaScript, Cloudflare Pages static hosting.**
+
+## What changed, and why
+
+Earlier releases converted seven hand-tuned stylistic signals into an arbitrary “AI probability” with a made-up sigmoid. The percentage was not learned from data and predictably produced implausible scores. Version 4 **removes that heuristic from the probability display**. Instead, it invokes a real, pretrained, binary text classifier inside the user's browser:
+
+- **TMR RoBERTa-base**, trained by Oxidane on the RAID human/AI-labeled dataset (MIT license): https://huggingface.co/Oxidane/tmr-ai-text-detector
+- **ONNX model** converted by the ONNX Community (MIT license): https://huggingface.co/onnx-community/tmr-ai-text-detector-ONNX
+- **Transformers.js v3.8.1**, on-device WebAssembly inference: https://huggingface.co/docs/transformers.js/installation
+
+The model creator [reports performance on RAID](https://huggingface.co/Oxidane/tmr-ai-text-detector) including evaluation of adversarial text and data held out from training. This is **not an independent accuracy guarantee** on different AI models, non-English material, or real-world content; NoGPT has not reproduced the benchmark results or validated the browser inference model against an independent dataset.
+
+The displayed percentage is a **word-weighted mean of the model's predicted AI softmax for evaluated passages**. It is **not** the real-world posterior probability of AI authorship and is not calibrated against your document types or authorship base rates. False positives and false negatives can occur. We therefore avoid representing it as an authorship verdict.
 
 ## Features
 
-- Paste, edit or type text. Import one or up to 30 documents at once: `.txt`, `.text`, `.md`, `.markdown`, `.docx` (modern Word), `.doc` (Word 97–2003 binary), or `.rtf`.
-- Process text and extract supported documents locally using JavaScript and browser APIs. Word DOCX ZIP/XML parsing uses `DecompressionStream`; RTF decoding supports Unicode escape sequences and common text/control tokens. Legacy `.doc` uses an on-device OLE2/CFB and Word FIB/CLX piece-table parser (including compressed 8-bit and Unicode text). **Old Word 6/95, encrypted documents, malformed/unsupported DOC variants, PDF, images/OCR, and ZIP64 documents are not supported.**
-- Show a **0–100% estimated AI authorship likelihood** (a transparent, **uncalibrated heuristic**, never a verified probability or binary verdict). The underlying 0–100 writing-pattern index remains available in exports.
-- Highlight individual passages with identifiable patterns; inspect seven component scores. Dark/light theme toggle follows system preference by default and never stores a preference.
-- See word/character/sentence counts, paragraphs, estimated reading and speaking time, sentence-length variation, most-used content words, and an extractive (original-sentences) summary.
-- Import/compare multiple files, switch between reports, and export batch CSV.
-- Copy reports, save human-readable TXT or detailed JSON, and print/save as PDF using browser print dialog.
-- Responsive layout, accessible labels, error handling, no third-party dependencies.
+- Paste/enter text or open `.txt`, `.text`, `.md`, `.markdown`, `.docx`, `.doc` (Word 97–2003), and `.rtf`. No server-side conversion. Up to 30 files per import.
+- Local model inference and per-passage model scores, with word coverage and passage disagreement. Long texts are sampled across the entire document, not silently truncated to the start.
+- At least **120 English words** needed for scoring. Unsupported/uncertain language and too-short inputs report **no numerical score** rather than a fabricated probability or an artificial 50%.
+- Independent writing-style highlights and seven explainable style features. These are **not used to compute the model score** and do not establish which passages were AI-written.
+- Word/sentence metrics, keyword frequencies, short extractive summaries, reading/speaking time, batch CSV, TXT/JSON exports and print/PDF.
+- Responsive layout; working light/dark toggle initially respecting system preference; no saved theme or analysis data.
 
-## How it works / limitations
+## Privacy & downloads
 
-This project **does not implement ZeroGPT's proprietary DeepAnalyse model**. It is not a reproduction of a trained AI-authorship detector. The local score measures seven hand-weighted signals: stock phrases, repeated five-word sequences, repeated openings, generic promotional diction, local lexical diversity, unusually even cadence, and repeated trigrams. The underlying writing-pattern index is mapped to an **estimated AI probability-like percentage** using `100 / (1 + exp(-(patternIndex - 40)/11))` and blended toward a neutral 50% for small samples via `sampleStrength = clamp((wordCount - 30)/270, 0, 1)`. **This is an uncalibrated, assumed mathematical mapping, NOT an empirical posterior probability**. To make it a statistically trustworthy probability, train/calibrate with representative labeled human and AI documents, account for authorship base rates, and evaluate on held-out datasets. No such validation has been performed. Low-evidence samples approach 50% to mean *unknown*, not a 50/50 factual chance. Sentence highlights show style clues only. Human writers may receive high estimates; AI writing may receive low estimates. Do **not** use it as sole evidence in academic, hiring, moderation or disciplinary decisions.
+**Your text remains in your browser.** The app calls the model's inference methods in JavaScript/WebAssembly, not an external inference API. It never sends entered/uploaded text, document filenames or computed scores to our servers or third parties. We use no analytics, login, database, cookies, localStorage or sessionStorage.
 
-ZeroGPT also offers plagiarism lookup, translation, generative paraphrasing, chatbot, AI humanization, image detection, grammar checking and additional cloud-based tools. These are **not included**; implementing truthful equivalents with zero network requests requires locally shipped models, reference corpora, dictionaries and evaluation. This project does not pretend they work when they do not.
+**A first-time download is required.** Transformers.js is fetched from the public jsDelivr CDN, and the quantized ONNX model (~125–126 MB plus tokenizer/config assets) comes from Hugging Face's file hosting. Those providers can observe standard HTTP request data (IP address, time, browser headers); NoGPT intentionally sets `Referrer-Policy: no-referrer` and does not send document content in these requests. The browser may cache model/runtime assets, but cache retention and availability depend on browser/storage policies. This is not fully network-free offline software on first use. Without access to these assets, **NoGPT refuses to guess**; it never falls back to the previous heuristic percentage. If strictly zero third-party connections are required, host the runtime and model yourself and adjust `model.js` and `_headers`.
 
-## Privacy architecture
+Cloudflare Pages serves the static HTML/CSS/JS and will observe normal site requests; it never receives analyzed text. The document parsers never run macros. `index.html` alone can be served as a static website with no framework or build system.
 
-All files are opened using the File API and analyzed in volatile browser memory. No text is sent to a server. There is **no `fetch`, XMLHttpRequest, remote font, CDN, external model, backend, localStorage, sessionStorage or tracking** in the app. The dark/light choice is intentionally memory-only, so it resets on refresh; initial appearance follows OS preference. A strict CSP sets `connect-src 'none'`. Cloudflare Pages only serves static assets; it can receive normal page requests (as any host does), but not document text. Clicking the GitHub links leaves the site by user choice. Exports are local Blob downloads. Text disappears upon refresh/close. Documents are size-limited to avoid resource exhaustion.
+## Important limitations
 
-## Run locally
+- Model training was primarily English and RAID genres. Out-of-domain, translated, short, edited/hybrid and newer-model text may be misclassified. Softmax scores are **not calibrated probabilities**.
+- Model size is substantial; slower or low-memory devices may fail to load the model. The app reports this explicitly instead of substituting fake results.
+- One model passage is limited to 512 model tokens; texts are split into ~180-word sentence-boundary windows, with tokenizer truncation as an additional safeguard. Long texts have a maximum of 8 sampled passages, and the coverage percentage is displayed.
+- Legacy `.doc` is decoded using local OLE2/CFB/Word piece-table support; old Word 6/95, encrypted documents, malformed files, images/OCR and PDFs are unsupported.
+- This detector cannot prove authorship. **Never use a result by itself to accuse, grade, reject, punish, or discipline somebody.**
+- NoGPT is not ZeroGPT's proprietary detector and does not provide plagiarism searches or cloud-based tools.
 
-Serve the directory with any static server (ES modules require HTTP; double-clicking `index.html` may not work):
+## Run and test
 
 ```bash
 python3 -m http.server 8000
-# Open http://localhost:8000
-```
-
-Use a modern browser that supports `Intl.Segmenter` and `DecompressionStream('deflate-raw')` for best results.
-
-## Deploy to Cloudflare Pages
-
-- Production branch: `main`
-- Framework preset: **None**
-- Build command: leave blank
-- Build output directory: `/` or project root
-- Pages project name: `nogptnow`
-- No environment variables, build step, Pages Functions or API endpoints.
-
-## Testing
-
-Run core regression checks with:
-
-```bash
+# open http://localhost:8000
 node tests/detector.test.mjs
+node tests/model.test.mjs
 ```
 
-Run the site in a browser and check TXT, RTF, Markdown and DOCX extraction, multi-file inputs, exports and the PDF print dialog before claiming full browser acceptance.
+The model tests use a **mocked classifier** to verify output mapping, chunk selection, sample limitations and aggregation. They do not validate the real model's accuracy or the ability of the browser to download it. Those require network-enabled browser acceptance tests and independent labeled evaluation data.
 
-## License
+**Cloudflare Pages:** no framework, no build command, output directory `/`, production branch `main`, project name `nogptnow`.
 
-See [LICENSE](LICENSE).
-
-## Legacy .doc format details
-
-The in-browser `.doc` parser reads the OLE2 compound-file FAT/miniFAT, retrieves WordDocument and 0Table/1Table streams, locates the variable-length FIB `fcClx/lcbClx` entry (index 33), and extracts both Unicode and compressed codepage text via the piece table. Word macros are never run. Password-protected/encrypted files fail with a clear message; no server is contacted. The format is complex: test uncommon `.doc` variants against another trusted document reader when extraction looks incomplete.
-
-## Is the displayed percentage calibrated?
-
-**No.** The UI reports an *estimated AI probability-like percentage* for users who want that score format. The estimate is uncalibrated, not an observed probability or a claim of validated accuracy; its interpretation depends on the chosen assumptions. No deployment of an offline text-only heuristic can promise accurate provenance across genres, writers and languages. See the [2025 NAACL evaluation of AI detectors](https://aclanthology.org/2025.findings-naacl.271/) for generalization limitations.
+License: see [LICENSE](LICENSE).

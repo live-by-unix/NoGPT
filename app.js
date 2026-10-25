@@ -1,8 +1,16 @@
 import {analyzeText,extractiveSummary,wordsOf} from './detector.js';
 import {readTextFile} from './readers.js';
+import {runModel, MODEL_ID, MIN_WORDS} from './model.js';
 
 const $=id=>document.getElementById(id);
 const state={docs:[],active:'paste',tab:'highlights',counter:0,busy:false};
+const scoreText=r=>r?.score==null?'Inconclusive':r.score+'%';
+function setBusy(v){state.busy=v;$('analyze').disabled=v;$('browse').disabled=v;$('clear').disabled=v;}
+async function scoreDocument(doc,progress){
+  const signals=analyzeText(doc.text,{markdown:doc.markdown});
+  const ml=await runModel(doc.text,{markdown:doc.markdown,progress});
+  return {...signals,score:ml.ok?ml.score:null,aiProbabilityEstimate:ml.ok?ml.score:null,calibrated:false,model:ml,modelId:MODEL_ID,patternScore:signals.patternScore,method:ml.ok?ml.method:'No model score — '+ml.reason,evidence:ml.ok?ml.evidence:ml.reason};
+}
 const makeDoc=(id,name,text='',markdown=false)=>({id,name,text,markdown,result:null,error:null});
 state.docs.push(makeDoc('paste','Pasted text'));
 const activeDoc=()=>state.docs.find(d=>d.id===state.active)||state.docs[0];
@@ -23,13 +31,13 @@ function drawFiles(){
   for(const doc of state.docs.filter(d=>d.id!=='paste')){
     const item=el('div','fileitem'+(doc.id===state.active?' active':''));
     addButton(item,'▤ '+doc.name,()=>setActive(doc.id));
-    const tag=el('small','',doc.error?'Error':doc.result?doc.result.score+'%':'Ready');
+    const tag=el('small','',doc.error?'Error':doc.result?scoreText(doc.result):'Ready');
     item.append(tag);
     addButton(item,'×',()=>removeDoc(doc.id),'remove-file').setAttribute('aria-label','Remove '+doc.name);
     parent.append(item);
     const row=el('div','fileitem');
     addButton(row,doc.name,()=>{setActive(doc.id);$('analyzer').scrollIntoView({behavior:'smooth'});});
-    row.append(el('small','',doc.error?'Error':doc.result?doc.result.score+'%':'Not analyzed'));
+    row.append(el('small','',doc.error?'Error':doc.result?scoreText(doc.result):'Not analyzed'));
     batch.append(row);
   }
   $('export-csv').classList.toggle('hidden',!state.docs.some(d=>d.id!=='paste'&&d.result));
@@ -46,10 +54,11 @@ function drawReport(){
   $('empty').classList.toggle('hidden',Boolean(r));
   if(!r){resetInsights();return;}
   $('result-name').textContent=d.name;
-  $('score').textContent=r.score+'%';
-  $('arc').style.strokeDashoffset=String(314.16*(1-r.score/100));
-  $('ring-label').setAttribute('aria-label','Uncalibrated AI probability estimate '+r.score+' percent');
+  $('score').textContent=r.score==null?'—':r.score+'%';
+  $('arc').style.strokeDashoffset=String(314.16*(1-(r.score??0)/100));
+  $('ring-label').setAttribute('aria-label',r.score==null?'No model estimate for this text':'On-device classifier AI score '+r.score+' percent');
   $('evidence').textContent=r.evidence+' · '+r.wordCount+' words';
+  $('model-details').textContent=r.model?.ok ? 'Trained TMR model · '+r.model.windows.length+' evaluated passages · '+Math.round(r.model.coverage*100)+'% word coverage · between-passage spread '+Math.round(r.model.disagreement*100)+' percentage points. Outputs are uncalibrated model scores, not confirmed authorship probabilities.' : r.model?.reason||'Model score not available.';
   $('words').textContent=r.wordCount.toLocaleString();
   $('sentences').textContent=r.sentenceCount.toLocaleString();
   $('reading').textContent=formatTime(r.readingMinutes);
@@ -64,6 +73,8 @@ function drawReport(){
   }
   if(last<r.plain.length)out.append(document.createTextNode(r.plain.slice(last)));
   const metrics=$('metrics');metrics.replaceChildren();
+  if(r.model?.ok){for(const w of r.model.windows){const row=el('div','metric');const top=el('div','metric-row');top.append(el('span','metric-label','Local model passage '+w.index+' · '+w.words+' words'),el('span','metric-score',Math.round(w.probability*100)+'%'));const meter=el('div','meter'),fill=el('div','meter-fill');fill.style.width=Math.round(w.probability*100)+'%';meter.append(fill);row.append(top,meter);metrics.append(row);}}
+  metrics.append(el('p','metric-note','The writing-style signals below are descriptive only; they do not affect the model score.'));
   r.components.forEach(c=>{
     const row=el('div','metric');const top=el('div','metric-row');
     top.append(el('span','metric-label',c.label),el('span','metric-score',Math.round(c.value*100)+'/100'));
@@ -83,32 +94,35 @@ function resetInsights(){
   $('average-length').textContent='—';$('variation').textContent='—';$('reading-level').textContent='—';
   $('keywords').replaceChildren(el('span','status','Analyze text to see keywords.'));
 }
-function scan(){
+async function scan(){
+  if(state.busy)return;
   const d=activeDoc();d.text=$('editor').value;
   if(!d.text.trim()){status('Enter or open some text first.','error');$('editor').focus();return;}
-  if(wordsOf(d.text).length<8){status('Add at least 8 words to create an estimate.','error');return;}
+  if(wordsOf(d.text).length<8){status('Add at least 8 words for writing statistics. Model scoring requires '+MIN_WORDS+' English words.','error');return;}
   if(d.text.length>750000){status('Text must be 750,000 characters or fewer.','error');return;}
-  try{d.result=analyzeText(d.text,{markdown:d.markdown});drawReport();drawFiles();status('Analysis finished locally','success');}
-  catch(error){status('Could not analyze: '+error.message,'error');}
+  const sourceText=d.text;setBusy(true);
+  try{const result=await scoreDocument(d,m=>status(m));if(d.text!==sourceText){status('Text changed during analysis — run again.');return;}d.result=result;drawReport();drawFiles();status(d.result.score==null?'No model percentage: '+d.result.evidence:'Local model inference complete','success');}
+  catch(error){d.result=null;drawReport();drawFiles();status('Model could not run: '+error.message+' — no guessed score was substituted.','error');}
+  finally{setBusy(false);}
 }
 async function importFiles(files){
   if(state.busy)return;
   const list=Array.from(files||[]);if(!list.length)return;
   if(list.length>30){status('Select 30 or fewer files at a time.','error');return;}
-  state.busy=true;$('analyze').disabled=true;
+  setBusy(true);
   let completed=0,failed=0,first=null;
   for(const file of list){
     status('Reading '+file.name+' on this device…');
     try{
       const read=await readTextFile(file);
       const d=makeDoc('file-'+(++state.counter),read.name,read.text,read.markdown);
-      if(wordsOf(d.text).length>=8)d.result=analyzeText(d.text,{markdown:d.markdown});
+      if(wordsOf(d.text).length>=8)d.result=await scoreDocument(d,m=>status(file.name+': '+m));
       else d.error='Fewer than 8 words';
       state.docs.push(d);if(first===null)first=d.id;completed++;
     }catch(error){failed++;const d=makeDoc('file-'+(++state.counter),file.name);d.error=error.message;state.docs.push(d);}
   }
   if(first)setActive(first);
-  drawFiles();state.busy=false;$('analyze').disabled=false;$('files').value='';
+  drawFiles();setBusy(false);$('files').value='';
   status(completed+' file'+(completed===1?'':'s')+' imported'+(failed?', '+failed+' failed (see list)':''),failed?'error':'success');
 }
 function clearAll(){
@@ -116,7 +130,7 @@ function clearAll(){
 }
 function reportString(d){
   const r=d.result;
-  return 'NoGPT — private AI-likelihood report\nDocument: '+d.name+'\nEstimated AI probability: '+r.score+'% (UNCALIBRATED, NOT VALIDATED)\nUnderlying writing-pattern index: '+r.patternScore+'/100\nSample: '+r.evidence+'\nWords: '+r.wordCount+'\nSentences: '+r.sentenceCount+'\nReading time: '+formatTime(r.readingMinutes)+'\n\nSignals:\n'+r.components.map(c=>'- '+c.label+': '+Math.round(c.value*100)+'/100 — '+c.description).join('\n')+'\n\nSelected sentences (extractive summary):\n'+extractiveSummary(r.plain,3)+'\n\nCaution: NoGPT is an uncalibrated heuristic. A score cannot establish authorship and should never be used as sole evidence of AI use.\n';
+  return 'NoGPT — private on-device AI-model report\nDocument: '+d.name+'\nModel score: '+(r.score==null?'Inconclusive / unavailable':r.score+'% AI (UNCALIBRATED)')+'\nModel: '+r.modelId+'\nModel evidence: '+r.evidence+'\nPassages tested: '+(r.model?.windows?.length||0)+'\nWords covered: '+(r.model?.evaluatedWords||0)+' of '+r.wordCount+'\nWords: '+r.wordCount+'\nSentences: '+r.sentenceCount+'\nReading time: '+formatTime(r.readingMinutes)+'\n\nDescriptive style signals (not used by classifier):\n'+r.components.map(c=>'- '+c.label+': '+Math.round(c.value*100)+'/100 — '+c.description).join('\n')+'\n\nSelected sentences (extractive summary):\n'+extractiveSummary(r.plain,3)+'\n\nCaution: Classifier softmax scores are not validated authorship probabilities; false positives and false negatives remain possible. Not evidence of who wrote a document.\n';
 }
 function saveFile(filename,content,type){
   const url=URL.createObjectURL(new Blob([content],{type}));
@@ -126,15 +140,15 @@ function exportCurrent(ext){
   const d=activeDoc();if(!d.result){status('Analyze text before exporting.','error');return;}
   const base=d.name.replace(/\.[^.]+$/,'').replace(/[^a-z0-9_-]/gi,'_').slice(0,60)||'nogpt';
   if(ext==='txt')saveFile(base+'-nogpt-report.txt',reportString(d),'text/plain;charset=utf-8');
-  else saveFile(base+'-nogpt-report.json',JSON.stringify({document:d.name,scoreType:'Heuristic estimated AI likelihood percentage (NOT a calibrated probability)',calibrated:false,analysis:d.result},null,2),'application/json;charset=utf-8');
+  else saveFile(base+'-nogpt-report.json',JSON.stringify({document:d.name,scoreType:'On-device TMR RoBERTa classifier score (not a calibrated probability)',calibrated:false,analysis:d.result},null,2),'application/json;charset=utf-8');
   status('Report downloaded to your device','success');
 }
 function csvEscape(s){return '"'+String(s??'').replace(/"/g,'""')+'"'}
 function exportBatch(){
   const rows=state.docs.filter(d=>d.id!=='paste'&&d.result);
   if(!rows.length){status('No analyzed files to export','error');return;}
-  const cells=[['Document','Estimated AI probability (%) - uncalibrated','Pattern index (0-100)','Words','Sentences','Evidence','Method']];
-  for(const d of rows)cells.push([d.name,d.result.score,d.result.patternScore,d.result.wordCount,d.result.sentenceCount,d.result.evidence,d.result.method]);
+  const cells=[['Document','Model AI score (%) - uncalibrated','Evaluated words','Total words','Passages','Evidence','Method']];
+  for(const d of rows)cells.push([d.name,d.result.score??'',d.result.model?.evaluatedWords??0,d.result.wordCount,d.result.model?.windows?.length??0,d.result.evidence,d.result.method]);
   saveFile('nogpt-batch.csv',cells.map(row=>row.map(csvEscape).join(',')).join('\r\n'),'text/csv;charset=utf-8');
   status('Batch CSV downloaded','success');
 }
